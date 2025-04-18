@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> TMT İz Sürme Testi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .node {
+            position: absolute;
+            width: 65px; /* Slightly wider for longer text */
+            height: 65px; /* Slightly taller */
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s, border-color 0.2s;
+            text-align: center;
+            font-size: 1rem; /* Adjust font size if needed */
+            line-height: 1.1; /* Adjust line height */
+            padding: 2px; /* Add padding for text */
+        }
+
+        #test-area {
+            position: relative;
+            width: 100%;
+            height: 80vh; /* Increased height slightly */
+            border: 2px solid #e5e7eb;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .node-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+
+        .error-shake {
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        /* Utility class */
+        .hidden {
+           display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center text-blue-800 mb-6">TMT İz Sürme Testi</h1>
+
+        <div id="test-container" class="bg-white rounded-lg shadow-lg p-6 max-w-7xl mx-auto"> <!-- max-w-7xl to max-w-4xl for smaller bg -->
+            <div id="instructions" class="mb-6">
+                <h2 class="text-xl font-semibold mb-2">Talimatlar:</h2>
+                <p class="mb-4">Dairelere sırasıyla olabildiğince hızlı şekilde tıklayın.</p>
+                <p id="part1-instruction" class="font-medium text-blue-700">1. Bölüm: Bu sırayla tıklayın: 1 → 2 → 3 → 4 → ... → 24 → 25</p>
+                <p id="part2-instruction" class="font-medium text-blue-700 hidden">2. Bölüm: Bu sırayla tıklayın: 1 → A → 2 → B → 3 → C → ... → L → 13</p>
+            </div>
+
+            <div class="flex justify-between items-center mb-4">
+                <div id="timer" class="text-lg font-mono bg-gray-100 px-4 py-2 rounded">
+                    Süre: <span id="time-display">00:00.0</span>
+                </div>
+                 <div id="accuracy-info" class="text-lg font-mono bg-gray-100 px-4 py-2 rounded hidden">
+                     Doğruluk: <span id="accuracy-display">--</span>%
+                 </div>
+                <div id="progress" class="text-lg font-mono bg-gray-100 px-4 py-2 rounded">
+                    İlerleme: <span id="progress-display">0</span>/<span id="total-nodes">0</span>
+                </div>
+            </div>
+
+            <div id="test-area">
+                <canvas id="connection-canvas"></canvas>
+                <div id="node-container" class="node-container"></div>
+            </div>
+
+            <div class="flex justify-center mt-6">
+                <button id="start-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition">
+                    Testi Başlat
+                </button>
+                <button id="next-part-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition hidden ml-4">
+                    2. Bölümü Başlat
+                </button>
+                <button id="reset-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition hidden ml-4">
+                    Sıfırla
+                </button>
+            </div>
+        </div>
+
+         <div id="results-screen" class="bg-white rounded-lg shadow-lg p-6 max-w-4xl mx-auto mt-8 hidden">
+             <h2 class="text-2xl font-bold text-center text-green-700 mb-6">Test Bitti!</h2>
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div class="bg-gray-100 p-4 rounded-lg">
+                      <h3 class="text-xl font-semibold mb-3 text-blue-800">1. Bölüm Sonuçları</h3>
+                      <p class="text-lg mb-2">Süre: <span id="part1-time" class="font-mono font-semibold">--:--.-</span></p>
+                      <p class="text-lg">Doğruluk: <span id="part1-accuracy" class="font-mono font-semibold">--</span>%</p>
+                      <p class="text-sm text-gray-600">(Doğru: <span id="part1-correct">0</span> / Toplam: <span id="part1-total">0</span> tıklama)</p>
+                 </div>
+                 <div class="bg-gray-100 p-4 rounded-lg">
+                      <h3 class="text-xl font-semibold mb-3 text-blue-800">2. Bölüm Sonuçları</h3>
+                      <p class="text-lg mb-2">Süre: <span id="part2-time" class="font-mono font-semibold">--:--.-</span></p>
+                      <p class="text-lg">Doğruluk: <span id="part2-accuracy" class="font-mono font-semibold">--</span>%</p>
+                      <p class="text-sm text-gray-600">(Doğru: <span id="part2-correct">0</span> / Toplam: <span id="part2-total">0</span> tıklama)</p>
+                 </div>
+             </div>
+             <div class="flex justify-center mt-8">
+                 <button id="restart-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition">
+                     Tekrar Uygula
+                 </button>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const config = {
+            nodesPerPart: 25, // Fixed number of nodes
+            nodeSize: 55,     // Updated size
+            margin: 15,       // Increased margin slightly
+            colors: {
+                neutral: 'bg-white border-2 border-blue-500 text-blue-800',
+                correct: 'bg-green-100 border-2 border-green-500 text-green-800',
+                error: 'bg-red-100 border-2 border-red-500 text-red-800',
+                startEnd: 'bg-gray-100 border-2 border-blue-500 text-blue-800 font-extrabold' // Style for Start/End
+            },
+            startLabel: '1\n(başla)',
+            //endLabel: '(bitiş)'
+        };
+
+        // Turkish alphabet sequence (only need up to L for 13 letters)
+        const turkishAlphabet = ['A', 'B', 'C', 'Ç', 'D', 'E', 'F', 'G', 'Ğ', 'H', 'I', 'İ', 'J', 'K', 'L']; // L is the 12th letter needed (0-indexed)
+
+        // State variables
+        let state = {
+            nodes: [], // Stores { element, value, x, y }
+            currentPart: 1,
+            currentStep: 0,
+            correctSequence: [], // The sequence expected to be clicked
+            tappedNodes: [], // Nodes tapped correctly { element, value, x, y }
+            startTime: null,
+            timerInterval: null,
+            part1Stats: { time: '00:00.0', correctClicks: 0, totalClicks: 0 },
+            part2Stats: { time: '00:00.0', correctClicks: 0, totalClicks: 0 },
+        };
+
+        // DOM elements
+        const testContainer = document.getElementById('test-container');
+        const resultsScreen = document.getElementById('results-screen');
+        const testArea = document.getElementById('test-area');
+        const nodeContainer = document.getElementById('node-container');
+        const connectionCanvas = document.getElementById('connection-canvas');
+        const ctx = connectionCanvas.getContext('2d');
+        const startBtn = document.getElementById('start-btn');
+        const nextPartBtn = document.getElementById('next-part-btn');
+        const resetBtn = document.getElementById('reset-btn'); // This becomes active mid-test
+        const restartBtn = document.getElementById('restart-btn'); // Button on results screen
+        const timeDisplay = document.getElementById('time-display');
+        const progressDisplay = document.getElementById('progress-display');
+        const totalNodesDisplay = document.getElementById('total-nodes');
+        const part1Instruction = document.getElementById('part1-instruction');
+        const part2Instruction = document.getElementById('part2-instruction');
+        const accuracyInfo = document.getElementById('accuracy-info');
+        const accuracyDisplay = document.getElementById('accuracy-display');
+
+        // Results Screen Elements
+        const part1TimeDisp = document.getElementById('part1-time');
+        const part1AccuracyDisp = document.getElementById('part1-accuracy');
+        const part1CorrectDisp = document.getElementById('part1-correct');
+        const part1TotalDisp = document.getElementById('part1-total');
+        const part2TimeDisp = document.getElementById('part2-time');
+        const part2AccuracyDisp = document.getElementById('part2-accuracy');
+        const part2CorrectDisp = document.getElementById('part2-correct');
+        const part2TotalDisp = document.getElementById('part2-total');
+
+
+        // Initialize the application
+        function init() {
+            resizeCanvas();
+            setupEventListeners();
+            resetUI(); // Ensure clean state on load
+        }
+
+        // Set up event listeners
+        function setupEventListeners() {
+            startBtn.addEventListener('click', startTest);
+            nextPartBtn.addEventListener('click', startPart2);
+            resetBtn.addEventListener('click', resetTest); // Mid-test reset
+            restartBtn.addEventListener('click', resetTest); // Post-test reset
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        // Resize canvas to match test area
+        function resizeCanvas() {
+            connectionCanvas.width = testArea.clientWidth;
+            connectionCanvas.height = testArea.clientHeight;
+            if (state.tappedNodes.length > 0) {
+                drawConnections(); // Redraw connections on resize
+            }
+        }
+
+        // Reset UI elements to initial state
+         function resetUI() {
+            timeDisplay.textContent = '00:00.0';
+            progressDisplay.textContent = '0';
+            totalNodesDisplay.textContent = config.nodesPerPart;
+            part1Instruction.classList.remove('hidden');
+            part2Instruction.classList.add('hidden');
+            startBtn.classList.remove('hidden');
+            nextPartBtn.classList.add('hidden');
+            resetBtn.classList.add('hidden'); // Hide mid-test reset initially
+            accuracyInfo.classList.add('hidden');
+            accuracyDisplay.textContent = '--';
+            testContainer.classList.remove('hidden');
+            resultsScreen.classList.add('hidden');
+            nodeContainer.innerHTML = ''; // Clear nodes
+            clearConnections();
+         }
+
+        // Start the test (Part 1)
+        function startTest() {
+            resetUI(); // Ensure clean start
+
+            // Set up correct sequence for Part 1 (1 to 25)
+            state.correctSequence = Array.from({length: config.nodesPerPart}, (_, i) => i + 1);
+
+            // Generate physical node elements
+            generateNodes(config.nodesPerPart);
+
+            // Assign labels and values for Part 1
+            updateNodeLabelsAndValues(1);
+
+            // Reset test state
+            state.currentPart = 1;
+            state.currentStep = 0;
+            state.tappedNodes = [];
+            state.part1Stats = { time: '00:00.0', correctClicks: 0, totalClicks: 0 };
+            state.part2Stats = { time: '00:00.0', correctClicks: 0, totalClicks: 0 }; // Reset both
+
+            // Update UI
+            updateProgress();
+            startBtn.classList.add('hidden');
+            resetBtn.classList.remove('hidden'); // Show mid-test reset
+            accuracyInfo.classList.remove('hidden'); // Show accuracy display
+
+            // Start timer
+            startTimer();
+        }
+
+        // Start Part 2 of the test
+        function startPart2() {
+             // Stop Part 1 timer and record stats (already done in handleTestComplete)
+             stopTimer(); // Ensure timer is stopped before restarting
+
+             // Clear connections from Part 1
+             clearConnections();
+
+             // Set up correct sequence for Part 2 (1, A, 2, B, ..., 13)
+             state.correctSequence = [];
+             const numCount = 13; // Numbers 1 to 13
+             const letterCount = 12; // Letters A to L
+             for (let i = 0; i < config.nodesPerPart; i++) {
+                 if (i % 2 === 0) { // Even index (0, 2, ... 24) -> Number (1 to 13)
+                     const num = Math.floor(i / 2) + 1;
+                     if (num <= numCount) {
+                        state.correctSequence.push(num);
+                     }
+                 } else { // Odd index (1, 3, ... 23) -> Letter (A to L)
+                     const letterIndex = Math.floor(i / 2);
+                     if (letterIndex < letterCount) {
+                        state.correctSequence.push(turkishAlphabet[letterIndex]);
+                     }
+                 }
+             }
+              // Ensure sequence length is exactly nodesPerPart (it should be 13+12=25)
+             state.correctSequence = state.correctSequence.slice(0, config.nodesPerPart);
+
+
+            // Update node labels and values for Part 2
+            updateNodeLabelsAndValues(2);
+
+            // Reset test state for Part 2
+            state.currentPart = 2;
+            state.currentStep = 0;
+            state.tappedNodes = [];
+
+            // Update UI
+            updateProgress();
+            part1Instruction.classList.add('hidden');
+            part2Instruction.classList.remove('hidden');
+            nextPartBtn.classList.add('hidden');
+            resetBtn.classList.remove('hidden'); // Keep reset active
+            updateAccuracyDisplay(); // Reset accuracy display for part 2
+
+            // Restart timer for Part 2
+            startTimer();
+        }
+
+        // Reset the entire test
+        function resetTest() {
+            stopTimer();
+            resetUI();
+            // Reset state completely
+            state.nodes = [];
+            state.currentPart = 1;
+            state.currentStep = 0;
+            state.correctSequence = [];
+            state.tappedNodes = [];
+            state.part1Stats = { time: '00:00.0', correctClicks: 0, totalClicks: 0 };
+            state.part2Stats = { time: '00:00.0', correctClicks: 0, totalClicks: 0 };
+        }
+
+        // Generate physical node divs (without labels initially)
+        function generateNodes(count) {
+            nodeContainer.innerHTML = ''; // Clear previous nodes
+            state.nodes = []; // Clear node data
+
+            const containerWidth = testArea.clientWidth - config.nodeSize - config.margin * 2; // Add margin on both sides
+            const containerHeight = testArea.clientHeight - config.nodeSize - config.margin * 2;
+
+            for (let i = 0; i < count; i++) {
+                let attempts = 0;
+                let nodeElement, x, y, overlaps;
+
+                do {
+                    // Generate random position within margins
+                    x = config.margin + Math.random() * containerWidth;
+                    y = config.margin + Math.random() * containerHeight;
+
+                    // Basic element creation
+                    nodeElement = document.createElement('div');
+                    nodeElement.className = `node ${config.colors.neutral}`; // Default style
+                    nodeElement.style.left = `${x}px`;
+                    nodeElement.style.top = `${y}px`;
+
+                    // Check for overlaps with existing nodes
+                    overlaps = checkOverlap(nodeElement, state.nodes.map(n => n.element)); // Check against elements already placed
+                    attempts++;
+
+                    if (attempts > 100) {
+                        console.error('Failed to position node without overlap after 100 attempts');
+                        break; // Prevent infinite loop
+                    }
+                } while (overlaps);
+
+                // Add click handler
+                nodeElement.addEventListener('click', handleNodeClick);
+
+                // Add to DOM and state (store element and position for now)
+                nodeContainer.appendChild(nodeElement);
+                state.nodes.push({
+                    element: nodeElement,
+                    value: null, // Will be set by updateNodeLabelsAndValues
+                    x: x + config.nodeSize / 2, // Center X
+                    y: y + config.nodeSize / 2  // Center Y
+                });
+            }
+             totalNodesDisplay.textContent = state.nodes.length; // Update total count display
+        }
+
+        // Update node labels and data-values based on the current part
+        function updateNodeLabelsAndValues(part) {
+            const seq = state.correctSequence; // Use the pre-calculated sequence
+            const lastValue = seq[seq.length - 1];
+
+            state.nodes.forEach((nodeData, index) => {
+                 if (index < seq.length) { // Only assign labels/values if within the sequence length
+                    const value = seq[index];
+                    let label = value; // Default label is the value itself
+
+                    // Apply Start/End labels
+                    if (value == seq[0]) { // Check against the first element of the sequence
+                        label = config.startLabel;
+                         nodeData.element.className = `node ${config.colors.startEnd}`;
+                    } else if (value == lastValue && part == 1) { // Check against the last element
+                        label = '25\n(bitir)';
+                         nodeData.element.className = `node ${config.colors.startEnd}`;
+					} else if (value == lastValue && part == 2) { // Check against the last element
+                        label = '13\n(bitir)';
+                         nodeData.element.className = `node ${config.colors.startEnd}`;
+                    } else {
+                         nodeData.element.className = `node ${config.colors.neutral}`; // Reset others to neutral
+                    }
+
+
+                    nodeData.element.textContent = label;
+                    nodeData.element.dataset.value = value; // Store the actual sequence value (1, 2, A, B...)
+                    nodeData.value = value; // Update state value as well
+                 } else {
+                     // Handle extra nodes if generateNodes created more than needed (shouldn't happen with fixed count)
+                     nodeData.element.classList.add('hidden'); // Hide unused nodes
+                 }
+            });
+        }
+
+
+        // Check if a new node overlaps with existing nodes
+        function checkOverlap(newNodeElement, existingNodeElements) {
+            const newRect = {
+                x: parseFloat(newNodeElement.style.left),
+                y: parseFloat(newNodeElement.style.top),
+                width: config.nodeSize,
+                height: config.nodeSize
+            };
+
+            for (const existingElement of existingNodeElements) {
+                const existingRect = {
+                    x: parseFloat(existingElement.style.left),
+                    y: parseFloat(existingElement.style.top),
+                    width: config.nodeSize,
+                    height: config.nodeSize
+                };
+
+                // Check for collision with margin
+                if (
+                    newRect.x < existingRect.x + existingRect.width + config.margin &&
+                    newRect.x + newRect.width + config.margin > existingRect.x &&
+                    newRect.y < existingRect.y + existingRect.height + config.margin &&
+                    newRect.y + newRect.height + config.margin > existingRect.y
+                ) {
+                    return true; // Overlap detected
+                }
+            }
+
+            return false; // No overlap
+        }
+
+        // Handle node click
+        function handleNodeClick(event) {
+            if (state.startTime === null) return; // Don't process clicks if timer not running
+
+            const clickedNodeElement = event.target;
+            // Find the corresponding node data in our state array
+            const clickedNodeData = state.nodes.find(n => n.element === clickedNodeElement);
+
+            if (!clickedNodeData || clickedNodeData.value === null) {
+                 console.warn("Clicked on an unassigned node.");
+                 return; // Ignore clicks on nodes without assigned values
+            }
+
+            const clickedValue = clickedNodeData.value; // Use the stored value (1, A, 2, B...)
+            const expectedValue = state.correctSequence[state.currentStep];
+
+            // Increment total clicks for the current part
+            if (state.currentPart === 1) {
+                state.part1Stats.totalClicks++;
+            } else {
+                state.part2Stats.totalClicks++;
+            }
+            updateAccuracyDisplay();
+
+
+            // Check if clicked node is correct
+            if (clickedValue == expectedValue) { // Loose comparison (number vs string)
+                // Correct tap
+                 handleCorrectTap(clickedNodeData);
+            } else {
+                // Incorrect tap
+                handleIncorrectTap(clickedNodeElement);
+            }
+        }
+
+         // Update Accuracy Display during test
+        function updateAccuracyDisplay() {
+             let correct, total;
+             if (state.currentPart === 1) {
+                 correct = state.part1Stats.correctClicks;
+                 total = state.part1Stats.totalClicks;
+             } else {
+                 correct = state.part2Stats.correctClicks;
+                 total = state.part2Stats.totalClicks;
+             }
+
+             const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
+             accuracyDisplay.textContent = accuracy;
+             accuracyInfo.classList.remove('hidden'); // Make sure it's visible
+        }
+
+
+        // Handle correct node tap
+        function handleCorrectTap(nodeData) {
+             // Increment correct clicks for the current part
+            if (state.currentPart === 1) {
+                state.part1Stats.correctClicks++;
+            } else {
+                state.part2Stats.correctClicks++;
+            }
+            updateAccuracyDisplay(); // Update live accuracy
+
+            // Add to tapped nodes (for drawing lines)
+            state.tappedNodes.push(nodeData);
+
+            // Update node appearance (but keep start/end distinct if needed)
+            const isStartNode = nodeData.value == state.correctSequence[0];
+            const isEndNode = nodeData.value == state.correctSequence[state.correctSequence.length - 1];
+
+            if (!isStartNode && !isEndNode) { // Don't change style of start/end nodes on correct click
+                 nodeData.element.className = `node ${config.colors.correct}`;
+            } else if (isEndNode && state.currentStep === state.correctSequence.length - 1) {
+                // Optionally add a final "correct" style to the end node when clicked last
+                nodeData.element.className = `node ${config.colors.correct}`;
+            }
+
+
+            // Draw connection to previous node
+            if (state.tappedNodes.length > 1) {
+                drawConnections();
+            }
+
+            // Advance to next step
+            state.currentStep++;
+
+            // Update progress
+            updateProgress();
+
+            // Check if test part is complete
+            if (state.currentStep >= state.correctSequence.length) {
+                 handleTestComplete();
+            }
+        }
+
+        // Handle incorrect node tap
+        function handleIncorrectTap(nodeElement) {
+             // Visual feedback for error
+            const originalClasses = nodeElement.className; // Store original classes
+            // Check if it's a start/end node before applying error style
+            const isStartOrEnd = originalClasses.includes(config.colors.startEnd.split(' ')[0]); // Check base color class
+
+            nodeElement.classList.add('error-shake');
+            nodeElement.className = `node ${config.colors.error}`; // Apply error style
+
+            // Remove error class after animation
+            setTimeout(() => {
+                nodeElement.className = originalClasses; // Restore original classes
+                nodeElement.classList.remove('error-shake');
+            }, 500);
+        }
+
+        // Handle test completion (for a single part)
+        function handleTestComplete() {
+            const finalTime = timeDisplay.textContent;
+            stopTimer(); // Stop the timer for the completed part
+
+            // Store stats for the completed part
+            if (state.currentPart === 1) {
+                state.part1Stats.time = finalTime;
+                // Accuracy already calculated live, but ensure final value is based on final clicks
+                const acc1 = state.part1Stats.totalClicks > 0 ? Math.round((state.part1Stats.correctClicks / state.part1Stats.totalClicks) * 100) : 0;
+                state.part1Stats.accuracy = acc1;
+                accuracyInfo.classList.add('hidden'); // Hide live accuracy display
+                nextPartBtn.classList.remove('hidden'); // Show button to start Part 2
+                resetBtn.classList.add('hidden'); // Hide reset during transition
+            } else { // Part 2 completed
+                state.part2Stats.time = finalTime;
+                const acc2 = state.part2Stats.totalClicks > 0 ? Math.round((state.part2Stats.correctClicks / state.part2Stats.totalClicks) * 100) : 0;
+                state.part2Stats.accuracy = acc2;
+                accuracyInfo.classList.add('hidden');
+                resetBtn.classList.add('hidden'); // Hide reset button
+                displayResults(); // Show the final results screen
+            }
+        }
+
+        // Display final results screen
+        function displayResults() {
+             testContainer.classList.add('hidden'); // Hide the test area
+             resultsScreen.classList.remove('hidden'); // Show results
+
+             // Populate Part 1 Results
+             part1TimeDisp.textContent = state.part1Stats.time;
+             part1AccuracyDisp.textContent = state.part1Stats.accuracy;
+             part1CorrectDisp.textContent = state.part1Stats.correctClicks;
+             part1TotalDisp.textContent = state.part1Stats.totalClicks;
+
+              // Populate Part 2 Results
+             part2TimeDisp.textContent = state.part2Stats.time;
+             part2AccuracyDisp.textContent = state.part2Stats.accuracy;
+             part2CorrectDisp.textContent = state.part2Stats.correctClicks;
+             part2TotalDisp.textContent = state.part2Stats.totalClicks;
+        }
+
+
+        // Draw connections between tapped nodes
+        function drawConnections() {
+            // Clear canvas
+            ctx.clearRect(0, 0, connectionCanvas.width, connectionCanvas.height);
+
+            // Set line style
+            ctx.strokeStyle = '#10b981'; // Emerald-500
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round'; // Smoother line ends
+
+            // Draw lines between consecutive tapped nodes
+            for (let i = 1; i < state.tappedNodes.length; i++) {
+                const prevNode = state.tappedNodes[i - 1];
+                const currentNode = state.tappedNodes[i];
+
+                ctx.beginPath();
+                ctx.moveTo(prevNode.x, prevNode.y);
+                ctx.lineTo(currentNode.x, currentNode.y);
+                ctx.stroke();
+            }
+        }
+
+        // Clear all connections
+        function clearConnections() {
+            ctx.clearRect(0, 0, connectionCanvas.width, connectionCanvas.height);
+        }
+
+        // Update progress display
+        function updateProgress() {
+             progressDisplay.textContent = state.currentStep;
+             totalNodesDisplay.textContent = state.correctSequence.length; // Update total based on current part's sequence
+        }
+
+        // Start timer
+        function startTimer() {
+            stopTimer(); // Ensure no duplicate timers
+            state.startTime = Date.now(); // Use Date.now() for more reliable interval calculation
+            state.timerInterval = setInterval(updateTimer, 100); // Update every 100ms
+            updateTimer(); // Initial display
+        }
+
+        // Stop timer
+        function stopTimer() {
+            clearInterval(state.timerInterval);
+            state.timerInterval = null; // Clear interval ID
+            state.startTime = null; // Reset start time
+        }
+
+        // Update timer display
+        function updateTimer() {
+             if (!state.startTime) {
+                 timeDisplay.textContent = '00:00.0';
+                 return;
+             }
+            const elapsedMs = Date.now() - state.startTime;
+            const totalSeconds = Math.floor(elapsedMs / 1000);
+            const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+            const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+            const tenths = Math.floor((elapsedMs % 1000) / 100).toString(); // Tenths of a second
+
+            timeDisplay.textContent = `${minutes}:${seconds}.${tenths}`;
+        }
+
+        // Initialize the application when the page loads
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
